@@ -7,6 +7,8 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Paint
+import android.os.Bundle
 import android.util.TypedValue
 import android.widget.RemoteViews
 import java.time.ZonedDateTime
@@ -17,6 +19,7 @@ class ClockWidget : AppWidgetProvider() {
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) = refresh(ctx)
     override fun onEnabled(ctx: Context) = refresh(ctx)
     override fun onDisabled(ctx: Context) = cancel(ctx)
+    override fun onAppWidgetOptionsChanged(ctx: Context, mgr: AppWidgetManager, id: Int, opts: Bundle) = refresh(ctx)
 
     override fun onReceive(ctx: Context, intent: Intent) {
         super.onReceive(ctx, intent)
@@ -26,7 +29,7 @@ class ClockWidget : AppWidgetProvider() {
         }
     }
 
-    class Snap(val hijri: String, val bangla: String, val min: IntArray, val cur: Int, val nextAt: Long)
+    class Snap(val hijri: String, val bangla: String, val min: IntArray, val cur: Int, val nextAt: Long, val sunrise: Int, val sunset: Int)
 
     companion object {
         const val ACTION_TICK = "com.rahcare.timewidget.TICK"
@@ -57,20 +60,35 @@ class ClockWidget : AppWidgetProvider() {
             return Snap(
                 HijriDate.text(date.plusDays(c.hijriAdj.toLong())),
                 BanglaDate.text(date.plusDays(c.banglaAdj.toLong())),
-                m, cur, next
+                m, cur, next, Prayer.minutes(t.sunrise), Prayer.minutes(t.maghrib)
             )
         }
 
-        private fun build(ctx: Context, s: Snap): RemoteViews {
+        // দুই তারিখ এক লাইনে ধরাতে উইজেটের প্রস্থ মেপে লেখা প্রয়োজনে ছোট হয়
+        private fun fitSp(ctx: Context, a: String, b: String, baseSp: Float, widthDp: Int): Float {
+            val dm = ctx.resources.displayMetrics
+            val avail = (widthDp - 28 - 8) * dm.density * 0.93f
+            val p = Paint(Paint.ANTI_ALIAS_FLAG)
+            p.textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, baseSp, dm)
+            val need = p.measureText(a) + p.measureText(b)
+            return if (need <= avail || need <= 0f) baseSp else (baseSp * avail / need).coerceAtLeast(baseSp * 0.55f)
+        }
+
+        private fun build(ctx: Context, s: Snap, widthDp: Int): RemoteViews {
             val c = Cfg(ctx)
-            val rv = RemoteViews(ctx.packageName, R.layout.widget)
+            val rv = RemoteViews(ctx.packageName, R.layout.widget_v2)
             val k = c.scale / 100f
             fun size(id: Int, sp: Float) = rv.setTextViewTextSize(id, TypedValue.COMPLEX_UNIT_SP, sp * k)
 
             rv.setTextViewText(R.id.hijri, s.hijri)
             rv.setTextViewText(R.id.bangla, s.bangla)
             size(R.id.time, 40f); size(R.id.ampm, 12f); size(R.id.endate, 15f)
-            size(R.id.hijri, 12f); size(R.id.bangla, 12f)
+            val dsp = fitSp(ctx, s.hijri, s.bangla, 12f * k, widthDp)
+            rv.setTextViewTextSize(R.id.hijri, TypedValue.COMPLEX_UNIT_SP, dsp)
+            rv.setTextViewTextSize(R.id.bangla, TypedValue.COMPLEX_UNIT_SP, dsp)
+            rv.setTextViewText(R.id.zz_sunrise, "সূর্যোদয় " + Prayer.fmt(s.sunrise, c.bnDigits))
+            rv.setTextViewText(R.id.zz_sunset, "সূর্যাস্ত " + Prayer.fmt(s.sunset, c.bnDigits))
+            size(R.id.zz_sunrise, 11f); size(R.id.zz_sunset, 11f)
             for (i in 0..4) {
                 rv.setTextViewText(NAME[i], NAMES[i])
                 rv.setTextViewText(TIME[i], Prayer.fmt(s.min[i], c.bnDigits))
@@ -101,7 +119,10 @@ class ClockWidget : AppWidgetProvider() {
                 val ids = mgr.getAppWidgetIds(ComponentName(ctx, ClockWidget::class.java))
                 if (ids.isEmpty()) { cancel(ctx); return }
                 val s = compute(ctx)
-                mgr.updateAppWidget(ids, build(ctx, s))
+                for (id in ids) {
+                    val w = mgr.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0).let { if (it > 0) it else 250 }
+                    mgr.updateAppWidget(id, build(ctx, s, w))
+                }
                 (ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
                     .setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, s.nextAt, tickIntent(ctx))
             } catch (e: Exception) {
