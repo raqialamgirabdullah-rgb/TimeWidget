@@ -169,6 +169,24 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "হোম স্ক্রিনে চেপে ধরে → উইজেট → “টাইম উইজেট” বেছে নিন", Toast.LENGTH_LONG).show()
             }
         })
+        c0.addView(text("লক স্ক্রিনে বসাতে নিচের বোতাম ফোনের লক স্ক্রিন সেটিংস খুলবে; সেখানে “উইজেট” থেকে “টাইম উইজেট” বেছে নিন। (সব ফোনে এই সুবিধা নেই)", 13f, muted).apply { setPadding(0, dp(14), 0, dp(10)) })
+        c0.addView(button("লক স্ক্রিনে উইজেট বসান") {
+            val tries = listOf(
+                Intent("android.settings.LOCK_SCREEN_SETTINGS"),
+                Intent(Settings.ACTION_DISPLAY_SETTINGS),
+                Intent(Settings.ACTION_SETTINGS)
+            )
+            var opened = false
+            for (t in tries) {
+                try { startActivity(t); opened = true; break } catch (e: Exception) { }
+            }
+            Toast.makeText(
+                this,
+                if (opened) "লক স্ক্রিন সেটিংসে “উইজেট” খুঁজে “টাইম উইজেট” বেছে নিন। না পেলে এই ফোনে লক স্ক্রিন উইজেটের সুবিধা নেই।"
+                else "ফোনের সেটিংস খোলা গেল না — সেটিংস → লক স্ক্রিন → উইজেট দেখুন",
+                Toast.LENGTH_LONG
+            ).show()
+        })
 
         // আজকের হিসাব
         val c1 = card(col, "আজকের হিসাব (উইজেটে যা দেখাবে)")
