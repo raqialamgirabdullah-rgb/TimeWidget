@@ -42,13 +42,11 @@ class MainActivity : Activity() {
     private lateinit var cfg: Cfg
     private lateinit var preview: TextView
     private lateinit var updBtn: TextView
-    private lateinit var permBtn: TextView
     private lateinit var customBox: LinearLayout
     private val handler = Handler(Looper.getMainLooper())
     private var update: Updater.Info? = null
     private var updBusy = false
     private var pendingInstall = false
-    private var autoTried = false
 
     private val accent = Color.parseColor("#2BB673")
     private val cardBg = Color.parseColor("#151C24")
@@ -149,13 +147,6 @@ class MainActivity : Activity() {
         }
         updBtn.visibility = View.GONE
         col.addView(updBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(14) })
-
-        // স্বয়ংক্রিয় আপডেটের জন্য একবারের অনুমতি (দেওয়া থাকলে এই বোতাম দেখায় না)
-        permBtn = button("স্বয়ংক্রিয় আপডেট চালু করতে অনুমতি দিন", Color.parseColor("#26323E"), Color.WHITE) {
-            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
-        }
-        permBtn.visibility = View.GONE
-        col.addView(permBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
 
         // উইজেট বসান
         val c0 = card(col, "উইজেট বসান")
@@ -260,11 +251,6 @@ class MainActivity : Activity() {
             getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(netCallback)
         } catch (e: Exception) {
         }
-        // নিজে নিজে আপডেটের কাজ চালু রাখা; নিশ্চিতকরণ লাগলে নোটিফিকেশন দেখানোর অনুমতি (Android ১৩+)
-        Updater.schedule(this)
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 7)
-        }
         updatePreview()
     }
 
@@ -279,7 +265,6 @@ class MainActivity : Activity() {
         val sb = StringBuilder()
         sb.append("আরবি: ").append(s.hijri).append("\n")
         sb.append("বাংলা: ").append(s.bangla).append("\n")
-        sb.append("সূর্যোদয়: ").append(Prayer.fmt(s.sunrise, cfg.bnDigits)).append("   সূর্যাস্ত: ").append(Prayer.fmt(s.sunset, cfg.bnDigits)).append("\n")
         for (i in 0..4) {
             sb.append(ClockWidget.NAMES[i]).append("  ").append(Prayer.fmt(s.min[i], cfg.bnDigits))
             if (i == s.cur) sb.append("   ◀ চলছে")
@@ -314,21 +299,13 @@ class MainActivity : Activity() {
 
     // ───────── আপডেট ─────────
     private fun refreshUpd() {
-        val can = packageManager.canRequestPackageInstalls()
-        permBtn.visibility = if (can) View.GONE else View.VISIBLE
-        val u = update
-        if (u == null) {
+        if (update == null) {
             updBtn.visibility = View.GONE
             return
         }
         updBtn.visibility = View.VISIBLE
         if (!updBusy) {
-            updBtn.text = if (can) "নতুন সংস্করণ এসেছে — আপডেট করুন" else "আপডেটের অনুমতি দিন"
-        }
-        // অনুমতি থাকলে বোতাম না চাপলেও আপডেট নিজে শুরু হয় (প্রতিবার অ্যাপ খুললে একবার চেষ্টা)
-        if (can && !updBusy && !autoTried) {
-            autoTried = true
-            install(u)
+            updBtn.text = if (packageManager.canRequestPackageInstalls()) "নতুন সংস্করণ এসেছে — আপডেট করুন" else "আপডেটের অনুমতি দিন"
         }
     }
 
@@ -355,18 +332,53 @@ class MainActivity : Activity() {
         if (updBusy) return
         updBusy = true
         updBtn.text = "ডাউনলোড হচ্ছে… ০%"
-        val app = applicationContext
         Thread {
-            val err = Updater.install(app, u) { pct -> runOnUiThread { updBtn.text = "ডাউনলোড হচ্ছে… ${Bn.num(pct)}%" } }
-            runOnUiThread {
-                if (err == null) {
-                    updBtn.text = "ইনস্টল হচ্ছে…"
-                    // ইনস্টল সফল হলে অ্যাপ নিজেই নতুন হয়ে চালু হবে; না হলে ৬০ সেকেন্ড পর বোতাম ফিরিয়ে আনি
-                    handler.postDelayed({ updBusy = false; refreshUpd() }, 60000L)
-                } else {
+            val inst = packageManager.packageInstaller
+            val p = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+            if (Build.VERSION.SDK_INT >= 31) p.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            val id = inst.createSession(p)
+            try {
+                val s = inst.openSession(id)
+                val cn = URL(u.url).openConnection() as HttpURLConnection
+                cn.connectTimeout = 15000
+                cn.readTimeout = 30000
+                if (cn.responseCode != 200) throw Exception("HTTP ${cn.responseCode}")
+                val total = cn.contentLengthLong
+                cn.inputStream.use { ins ->
+                    s.openWrite("a", 0, -1).use { out ->
+                        val buf = ByteArray(32 * 1024)
+                        var done = 0L
+                        var last = -1
+                        while (true) {
+                            val n = ins.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            done += n
+                            if (total > 0) {
+                                val pct = (done * 100 / total).toInt().coerceIn(0, 100)
+                                if (pct != last) {
+                                    last = pct
+                                    runOnUiThread { updBtn.text = "ডাউনলোড হচ্ছে… ${Bn.num(pct)}%" }
+                                }
+                            }
+                        }
+                        s.fsync(out)
+                    }
+                }
+                val pi = PendingIntent.getBroadcast(
+                    this, id, Intent(this, UpdateReceiver::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                )
+                runOnUiThread { updBtn.text = "ইনস্টল হচ্ছে…" }
+                s.commit(pi.intentSender)
+                // ইনস্টল সফল হলে অ্যাপ নিজেই নতুন হয়ে চালু হবে; না হলে ৬০ সেকেন্ড পর বোতাম ফিরিয়ে আনি
+                handler.postDelayed({ updBusy = false; refreshUpd() }, 60000L)
+            } catch (e: Exception) {
+                try { inst.abandonSession(id) } catch (x: Exception) {}
+                runOnUiThread {
                     updBusy = false
                     refreshUpd()
-                    Toast.makeText(this, "আপডেট শুরু করা গেল না ($err) — ইন্টারনেট দেখে আবার চেষ্টা করুন", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "আপডেট শুরু করা গেল না (${e.javaClass.simpleName}) — ইন্টারনেট দেখে আবার চেষ্টা করুন", Toast.LENGTH_LONG).show()
                 }
             }
         }.start()

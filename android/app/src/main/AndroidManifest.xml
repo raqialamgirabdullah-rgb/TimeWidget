@@ -6,9 +6,6 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
-    <!-- স্বয়ংক্রিয় আপডেটের কাজ রিবুটের পরও টিকিয়ে রাখতে; নিশ্চিতকরণ লাগলে নোটিফিকেশন দেখাতে -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -46,10 +43,5 @@
         <receiver
             android:name=".UpdateReceiver"
             android:exported="false" />
-
-        <service
-            android:name=".UpdateJob"
-            android:exported="false"
-            android:permission="android.permission.BIND_JOB_SERVICE" />
     </application>
 </manifest>
