@@ -1,5 +1,6 @@
 package com.rahcare.timewidget
 
+import android.Manifest
 import android.app.Activity
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -7,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.location.Location
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -32,10 +34,14 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 // সেটিংস স্ক্রিন: উইজেট বসানো, স্থান, হিসাবের পদ্ধতি, তারিখ/সময়ের সমন্বয়, আপডেট
 class MainActivity : Activity() {
@@ -43,6 +49,9 @@ class MainActivity : Activity() {
     private lateinit var preview: TextView
     private lateinit var updBtn: TextView
     private lateinit var customBox: LinearLayout
+    private lateinit var locSpin: Spinner
+    private lateinit var locStatus: TextView
+    private lateinit var locBtn: TextView
     private val handler = Handler(Looper.getMainLooper())
     private var update: Updater.Info? = null
     private var updBusy = false
@@ -169,10 +178,40 @@ class MainActivity : Activity() {
 
         // স্থান
         val c2 = card(col, "স্থান (নামাজের সময়ের জন্য)")
+        // স্বয়ংক্রিয়: ফোনের অবস্থান ধরে এলাকা বদলালে নামাজের সময়, তারিখ ইত্যাদি নিজে বদলায়
+        val autoRow = LinearLayout(this)
+        autoRow.orientation = LinearLayout.HORIZONTAL
+        autoRow.gravity = Gravity.CENTER_VERTICAL
+        autoRow.addView(text("ফোনের অবস্থান থেকে স্বয়ংক্রিয়", 15f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val autoSw = Switch(this)
+        autoSw.isChecked = cfg.auto
+        autoRow.addView(autoSw)
+        c2.addView(autoRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        locStatus = text("", 12f, muted)
+        locStatus.setPadding(0, dp(6), 0, 0)
+        c2.addView(locStatus)
+        locBtn = button("অবস্থানের অনুমতি দিন") { askLocation() }
+        c2.addView(locBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
+        c2.addView(text("টাইমজোন বদলালে ঘড়ি নিজে বদলাতে ফোনের “স্বয়ংক্রিয় তারিখ ও সময় / টাইমজোন” চালু রাখুন ›", 12f, accent).apply {
+            setPadding(0, dp(10), 0, 0)
+            isClickable = true
+            setOnClickListener { try { startActivity(Intent(Settings.ACTION_DATE_SETTINGS)) } catch (e: Exception) {} }
+        })
+        autoSw.setOnCheckedChangeListener { _, on ->
+            cfg.auto = on
+            if (on) {
+                LocationUpdater.sync(this)
+                askLocation()
+            }
+            LocationUpdater.register(applicationContext)
+            changed()
+            locUi()
+        }
         val spin = Spinner(this)
+        locSpin = spin
         spin.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, Places.names())
         spin.setSelection(cfg.place.coerceIn(0, Places.CUSTOM))
-        c2.addView(spin, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+        c2.addView(spin, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
         customBox = LinearLayout(this)
         customBox.orientation = LinearLayout.VERTICAL
         fun field(hint: String, get: () -> String, set: (String) -> Unit) {
@@ -202,7 +241,7 @@ class MainActivity : Activity() {
                     cfg.place = pos
                     changed()
                 }
-                customBox.visibility = if (pos >= Places.CUSTOM) View.VISIBLE else View.GONE
+                locUi()
             }
             override fun onNothingSelected(p: AdapterView<*>?) {}
         }
@@ -221,7 +260,7 @@ class MainActivity : Activity() {
 
         // তারিখ সমন্বয়
         val c4 = card(col, "তারিখ সমন্বয় (দিন)")
-        c4.addView(text("চাঁদ দেখার পার্থক্যের জন্য হিজরি তারিখ ১-২ দিন এগোতে-পেছাতে পারেন। বাংলাদেশে সাধারণত সৌদির একদিন পরে, তাই ডিফল্ট −১।", 12f, muted).apply { setPadding(0, dp(4), 0, 0) })
+        c4.addView(text("চাঁদ দেখার পার্থক্যের জন্য হিজরি তারিখ ১-২ দিন এগোতে-পেছাতে পারেন। বাংলাদেশে সাধারণত সৌদির একদিন পরে, তাই ডিফল্ট −১। স্বয়ংক্রিয় অবস্থান বাংলাদেশের বাইরে গেলে এই −১ নিজে বাদ যায় (সৌদির মতো)।", 12f, muted).apply { setPadding(0, dp(4), 0, 0) })
         stepper(c4, "আরবি (হিজরি) তারিখ", { cfg.hijriAdj }, { cfg.hijriAdj = it }, -3, 3, 1) { signed(it) }
         stepper(c4, "বাংলা তারিখ", { cfg.banglaAdj }, { cfg.banglaAdj = it }, -3, 3, 1) { signed(it) }
 
@@ -251,7 +290,63 @@ class MainActivity : Activity() {
             getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(netCallback)
         } catch (e: Exception) {
         }
+        locUi()
         updatePreview()
+    }
+
+    // অবস্থানের অনুমতি: প্রথমে আনুমানিক অবস্থান, তারপর অ্যাপ বন্ধ থাকলেও এলাকা বদলানো ধরতে "সব সময়"
+    private fun askLocation() {
+        if (!LocationUpdater.hasPerm(this)) {
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), 31)
+        } else if (!LocationUpdater.hasBg(this)) {
+            Toast.makeText(this, "পরের পর্দায় “সব সময় অনুমতি দিন” বেছে নিন — তাহলে অ্যাপ বন্ধ থাকলেও এলাকা বদলালে উইজেট নিজে বদলাবে", Toast.LENGTH_LONG).show()
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION), 32)
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 31 && LocationUpdater.hasPerm(this)) {
+            LocationUpdater.sync(this)
+            LocationUpdater.register(applicationContext)
+            LocationUpdater.fresh(applicationContext) { runOnUiThread { changed(); locUi() } }
+            changed()
+            askLocation() // এবার "সব সময়" ধাপ
+        } else if (requestCode == 32) {
+            LocationUpdater.register(applicationContext)
+        }
+        locUi()
+    }
+
+    private fun nearestPlace(lat: Double, lng: Double): String {
+        var bestName = ""
+        var best = Float.MAX_VALUE
+        val r = FloatArray(1)
+        for (p in Places.list) {
+            Location.distanceBetween(lat, lng, p.second, p.third, r)
+            if (r[0] < best) { best = r[0]; bestName = p.first }
+        }
+        val pos = Bn.digits(String.format(Locale.US, "%.2f, %.2f", lat, lng))
+        return if (best < 60000f) "$bestName এলাকা ($pos)" else "অন্য এলাকা ($pos)"
+    }
+
+    // স্থানের কার্ড: সুইচ চালু ও অবস্থান পাওয়া গেলে হাতে বাছার ঘর লুকায়; অনুমতি বাকি থাকলে বোতাম দেখায়
+    private fun locUi() {
+        val a = cfg.auto
+        val fix = cfg.autoFix()
+        val perm = LocationUpdater.hasPerm(this)
+        val useAuto = a && fix != null
+        locSpin.visibility = if (useAuto) View.GONE else View.VISIBLE
+        customBox.visibility = if (!useAuto && cfg.place >= Places.CUSTOM) View.VISIBLE else View.GONE
+        locBtn.visibility = if (a && (!perm || !LocationUpdater.hasBg(this))) View.VISIBLE else View.GONE
+        locBtn.text = if (!perm) "অবস্থানের অনুমতি দিন" else "“সব সময়” অনুমতি দিন (অ্যাপ বন্ধ থাকলেও বদলাবে)"
+        locStatus.text = when {
+            !a -> "বন্ধ — নিচে হাতে স্থান বেছে নিন"
+            !perm -> "অনুমতি দেওয়া হয়নি — আপাতত নিচের স্থান ব্যবহার হচ্ছে"
+            fix == null -> "অবস্থান খোঁজা হচ্ছে… (ফোনের লোকেশন চালু আছে কি না দেখুন) — আপাতত নিচের স্থান ব্যবহার হচ্ছে"
+            else -> "এখন: " + nearestPlace(fix.first, fix.second) + "\nসর্বশেষ বদল: " + Bn.digits(SimpleDateFormat("d MMM, HH:mm", Locale.US).format(Date(cfg.autoAt))) +
+                (if (LocationUpdater.hasBg(this)) "" else "\n(অ্যাপ বন্ধ থাকলে এলাকা বদল ধরা পড়বে না — “সব সময়” অনুমতি দিন)")
+        }
     }
 
     // কোনো সেটিং বদলালে উইজেট ও প্রিভিউ নতুন করে আঁকে
@@ -284,6 +379,10 @@ class MainActivity : Activity() {
         update = Updater.saved(this)
         refreshUpd()
         checkUpdate()
+        LocationUpdater.sync(this)
+        LocationUpdater.register(applicationContext)
+        LocationUpdater.fresh(applicationContext) { runOnUiThread { changed(); locUi() } }
+        locUi()
         updatePreview()
         ClockWidget.refresh(applicationContext)
     }

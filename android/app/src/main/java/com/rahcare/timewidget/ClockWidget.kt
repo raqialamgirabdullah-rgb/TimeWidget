@@ -16,8 +16,8 @@ import java.time.ZonedDateTime
 // হোম স্ক্রিনের একটি উইজেট: সময় + ইংরেজি তারিখ, আরবি + বাংলা তারিখ, পাঁচ ওয়াক্ত নামাজ
 class ClockWidget : AppWidgetProvider() {
 
-    override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) = refresh(ctx)
-    override fun onEnabled(ctx: Context) = refresh(ctx)
+    override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) { LocationUpdater.register(ctx); refresh(ctx) }
+    override fun onEnabled(ctx: Context) { LocationUpdater.register(ctx); refresh(ctx) }
     override fun onDisabled(ctx: Context) = cancel(ctx)
     override fun onAppWidgetOptionsChanged(ctx: Context, mgr: AppWidgetManager, id: Int, opts: Bundle) = refresh(ctx)
 
@@ -25,8 +25,9 @@ class ClockWidget : AppWidgetProvider() {
         super.onReceive(ctx, intent)
         when (intent.action) {
             ACTION_PICK -> pick(ctx, intent.getIntExtra("idx", -1))
-            ACTION_TICK, Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED,
-            Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_DATE_CHANGED -> refresh(ctx)
+            // রিবুট বা অ্যাপ আপডেটের পর অবস্থানের অনুরোধ আবার চালু করতে হয়
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> { LocationUpdater.register(ctx); refresh(ctx) }
+            ACTION_TICK, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_DATE_CHANGED -> refresh(ctx)
         }
     }
 
@@ -83,7 +84,7 @@ class ClockWidget : AppWidgetProvider() {
             val nowF = nowMin + now.second / 60.0
 
             return Snap(
-                HijriDate.text(date.plusDays(c.hijriAdj.toLong())),
+                HijriDate.text(date.plusDays(c.hijriShift().toLong())),
                 BanglaDate.text(date.plusDays(c.banglaAdj.toLong())),
                 m, cur, next, sunriseMin, sunsetMin, ws, we, nowF
             )
@@ -169,6 +170,7 @@ class ClockWidget : AppWidgetProvider() {
                 val mgr = AppWidgetManager.getInstance(ctx)
                 val ids = mgr.getAppWidgetIds(ComponentName(ctx, ClockWidget::class.java))
                 if (ids.isEmpty()) { cancel(ctx); return }
+                LocationUpdater.sync(ctx) // ফোনের সর্বশেষ জানা অবস্থান বদলে থাকলে এখানেই ধরে নেয়
                 val s = compute(ctx)
                 for (id in ids) {
                     val w = mgr.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0).let { if (it > 0) it else 250 }

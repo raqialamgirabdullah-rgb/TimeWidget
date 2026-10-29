@@ -62,6 +62,38 @@ class Cfg(ctx: Context) {
     fun off(i: Int): Int = sp.getInt("off$i", defOff[i])
     fun setOff(i: Int, v: Int) = sp.edit().putInt("off$i", v).apply()
 
-    fun lat(): Double = if (place in Places.list.indices) Places.list[place].second else customLat.toDoubleOrNull() ?: 23.8103
-    fun lng(): Double = if (place in Places.list.indices) Places.list[place].third else customLng.toDoubleOrNull() ?: 90.4125
+    // স্বয়ংক্রিয় অবস্থান: চালু থাকলে ও ফোন থেকে অবস্থান পাওয়া গেলে হাতে বাছা স্থানের বদলে সেটাই ব্যবহার হয়
+    var auto: Boolean
+        get() = sp.getBoolean("auto", true)
+        set(v) = sp.edit().putBoolean("auto", v).apply()
+    var autoLat: String
+        get() = sp.getString("alat", "") ?: ""
+        set(v) = sp.edit().putString("alat", v).apply()
+    var autoLng: String
+        get() = sp.getString("alng", "") ?: ""
+        set(v) = sp.edit().putString("alng", v).apply()
+    var autoAt: Long // সর্বশেষ কখন অবস্থান বদলেছে/ধরা পড়েছে
+        get() = sp.getLong("aat", 0L)
+        set(v) = sp.edit().putLong("aat", v).apply()
+
+    // স্বয়ংক্রিয় অবস্থান (অক্ষাংশ, দ্রাঘিমাংশ); বন্ধ থাকলে বা এখনো না পেলে null
+    fun autoFix(): Pair<Double, Double>? {
+        if (!auto) return null
+        val a = autoLat.toDoubleOrNull() ?: return null
+        val b = autoLng.toDoubleOrNull() ?: return null
+        return Pair(a, b)
+    }
+
+    fun lat(): Double = autoFix()?.first ?: if (place in Places.list.indices) Places.list[place].second else customLat.toDoubleOrNull() ?: 23.8103
+    fun lng(): Double = autoFix()?.second ?: if (place in Places.list.indices) Places.list[place].third else customLng.toDoubleOrNull() ?: 90.4125
+
+    // হিজরি তারিখের সমন্বয়: ডিফল্ট −১ বাংলাদেশের (চাঁদ সৌদির একদিন পরে); স্বয়ংক্রিয় অবস্থান বাংলাদেশের বাইরে হলে সেই −১ বাদ (সৌদির মতো)
+    fun hijriShift(): Int {
+        val f = autoFix() ?: return hijriAdj
+        return hijriAdj + if (inBangladesh(f.first, f.second)) 0 else 1
+    }
+
+    companion object {
+        fun inBangladesh(lat: Double, lng: Double) = lat in 20.5..26.7 && lng in 87.9..92.8
+    }
 }
