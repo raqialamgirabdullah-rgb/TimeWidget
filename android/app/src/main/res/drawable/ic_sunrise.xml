@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="14dp"
-    android:height="14dp"
+    android:width="18dp"
+    android:height="18dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <path android:fillColor="#F29D1F" android:pathData="M6,17a6,6 0 0,1 12,0z" />
-    <path android:fillColor="#F29D1F" android:pathData="M11,2h2v4h2l-3,3.5l-3,-3.5h2z" />
-    <path android:fillColor="#3B4A55" android:pathData="M2,19h20v2h-20z" />
+    <!-- সূর্যের রশ্মি -->
+    <path
+        android:pathData="M12,3.5v2.5M5.2,7.2l1.8,1.8M18.8,7.2l-1.8,1.8M2.5,14.5h2.5M19,14.5h2.5"
+        android:strokeColor="#F5A623"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+    <!-- অর্ধেক সূর্য -->
+    <path
+        android:fillColor="#FFC83D"
+        android:pathData="M6.5,17.5a5.5,5.5 0 0,1 11,0z" />
+    <!-- দিগন্ত -->
+    <path
+        android:pathData="M3,20.5h18"
+        android:strokeColor="#3B4A55"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
 </vector>
