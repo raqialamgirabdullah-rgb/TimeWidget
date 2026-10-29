@@ -46,6 +46,7 @@ import java.util.Locale
 // সেটিংস স্ক্রিন: উইজেট বসানো, স্থান, হিসাবের পদ্ধতি, তারিখ/সময়ের সমন্বয়, আপডেট
 class MainActivity : Activity() {
     private lateinit var cfg: Cfg
+    private lateinit var lockBtn: TextView
     private lateinit var preview: TextView
     private lateinit var updBtn: TextView
     private lateinit var customBox: LinearLayout
@@ -188,6 +189,24 @@ class MainActivity : Activity() {
             ).show()
         })
 
+        // লক স্ক্রিনে নোটিফিকেশন হিসেবে (সব ফোনে কাজ করে)
+        val cl = card(col, "লক স্ক্রিনে দেখান")
+        cl.addView(text("চালু করলে হোম স্ক্রিনের এই উইজেটটাই লক স্ক্রিনের একটা নোটিফিকেশনে থাকবে। নোটিফিকেশনটা নিচে টেনে বা ট্যাপ করে বড় করলে পুরো উইজেট দেখা যাবে। ছোট অবস্থায় শুধু সূর্যোদয়/সূর্যাস্ত ও তারিখ দেখায়।", 13f, muted).apply { setPadding(0, dp(6), 0, dp(10)) })
+        lockBtn = button(if (cfg.lockCard) "লক স্ক্রিনের উইজেট বন্ধ করুন" else "লক স্ক্রিনে উইজেট চালু করুন") {
+            if (cfg.lockCard) {
+                cfg.lockCard = false
+                lockBtn.text = "লক স্ক্রিনে উইজেট চালু করুন"
+                ClockWidget.refresh(applicationContext)
+            } else if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 8)
+            } else {
+                cfg.lockCard = true
+                lockBtn.text = "লক স্ক্রিনের উইজেট বন্ধ করুন"
+                ClockWidget.refresh(applicationContext)
+            }
+        }
+        cl.addView(lockBtn)
+
         // আজকের হিসাব
         val c1 = card(col, "আজকের হিসাব (উইজেটে যা দেখাবে)")
         preview = text("", 14f, Color.WHITE)
@@ -325,6 +344,14 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 8) {
+            val ok = grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+            cfg.lockCard = ok
+            lockBtn.text = if (ok) "লক স্ক্রিনের উইজেট বন্ধ করুন" else "লক স্ক্রিনে উইজেট চালু করুন"
+            if (!ok) Toast.makeText(this, "নোটিফিকেশনের অনুমতি না দিলে লক স্ক্রিনে দেখানো যাবে না", Toast.LENGTH_LONG).show()
+            ClockWidget.refresh(applicationContext)
+            return
+        }
         if (requestCode == 31 && LocationUpdater.hasPerm(this)) {
             LocationUpdater.sync(this)
             LocationUpdater.register(applicationContext)

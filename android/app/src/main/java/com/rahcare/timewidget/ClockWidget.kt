@@ -18,7 +18,7 @@ class ClockWidget : AppWidgetProvider() {
 
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) { LocationUpdater.register(ctx); refresh(ctx) }
     override fun onEnabled(ctx: Context) { LocationUpdater.register(ctx); refresh(ctx) }
-    override fun onDisabled(ctx: Context) = cancel(ctx)
+    override fun onDisabled(ctx: Context) { if (!Cfg(ctx).lockCard) cancel(ctx) }
     override fun onAppWidgetOptionsChanged(ctx: Context, mgr: AppWidgetManager, id: Int, opts: Bundle) = refresh(ctx)
 
     override fun onReceive(ctx: Context, intent: Intent) {
@@ -110,9 +110,15 @@ class ClockWidget : AppWidgetProvider() {
             return if (need <= avail || need <= 0f) baseSp else (baseSp * avail / need).coerceAtLeast(baseSp * 0.55f)
         }
 
-        private fun build(ctx: Context, s: Snap, widthDp: Int): RemoteViews {
+        // লক স্ক্রিনের নোটিফিকেশনের জন্য: হুবহু একই উইজেট, শুধু উচ্চতা বিষয়বস্তু অনুযায়ী (zz_notif)
+        fun buildNotif(ctx: Context, s: Snap): RemoteViews {
+            val w = ctx.resources.configuration.screenWidthDp - 40
+            return build(ctx, s, if (w > 200) w else 250, R.layout.zz_notif)
+        }
+
+        private fun build(ctx: Context, s: Snap, widthDp: Int, layout: Int = R.layout.widget_v2): RemoteViews {
             val c = Cfg(ctx)
-            val rv = RemoteViews(ctx.packageName, R.layout.widget_v2)
+            val rv = RemoteViews(ctx.packageName, layout)
             val k = c.scale / 100f
             fun size(id: Int, sp: Float) = rv.setTextViewTextSize(id, TypedValue.COMPLEX_UNIT_SP, sp * k)
 
@@ -181,13 +187,14 @@ class ClockWidget : AppWidgetProvider() {
             try {
                 val mgr = AppWidgetManager.getInstance(ctx)
                 val ids = mgr.getAppWidgetIds(ComponentName(ctx, ClockWidget::class.java))
-                if (ids.isEmpty()) { cancel(ctx); return }
+                if (ids.isEmpty() && !Cfg(ctx).lockCard) { cancel(ctx); return }
                 LocationUpdater.sync(ctx) // ফোনের সর্বশেষ জানা অবস্থান বদলে থাকলে এখানেই ধরে নেয়
                 val s = compute(ctx)
                 for (id in ids) {
                     val w = mgr.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0).let { if (it > 0) it else 250 }
                     mgr.updateAppWidget(id, build(ctx, s, w))
                 }
+                LockCard.update(ctx, s)
                 (ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
                     .setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, minOf(s.nextAt, System.currentTimeMillis() + TICK_MS), tickIntent(ctx))
             } catch (e: Exception) {
