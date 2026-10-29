@@ -53,6 +53,7 @@ class MainActivity : Activity() {
     private lateinit var locStatus: TextView
     private lateinit var locBtn: TextView
     private val handler = Handler(Looper.getMainLooper())
+    private val updPoll = Runnable { checkUpdate() }
     private var update: Updater.Info? = null
     private var updBusy = false
     private var pendingInstall = false
@@ -387,6 +388,11 @@ class MainActivity : Activity() {
         ClockWidget.refresh(applicationContext)
     }
 
+    override fun onPause() {
+        handler.removeCallbacks(updPoll)
+        super.onPause()
+    }
+
     override fun onDestroy() {
         try {
             getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(netCallback)
@@ -417,6 +423,9 @@ class MainActivity : Activity() {
                 if (isFinishing) return@runOnUiThread
                 update = now
                 refreshUpd()
+                // নতুন সংস্করণ না পেলে অ্যাপ খোলা থাকা অবস্থায় প্রতি ৩০ সেকেন্ডে আবার দেখে
+                handler.removeCallbacks(updPoll)
+                if (now == null) handler.postDelayed(updPoll, 30000L)
             }
         }.start()
     }

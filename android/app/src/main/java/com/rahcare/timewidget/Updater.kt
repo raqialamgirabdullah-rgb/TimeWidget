@@ -23,8 +23,10 @@ object Updater {
         val cn = URL("https://github.com/$REPO/releases/latest").openConnection() as HttpURLConnection
         try {
             cn.instanceFollowRedirects = false
-            cn.connectTimeout = 10000
-            cn.readTimeout = 10000
+            cn.useCaches = false
+            cn.setRequestProperty("Cache-Control", "no-cache")
+            cn.connectTimeout = 6000
+            cn.readTimeout = 6000
             val tag = (cn.getHeaderField("Location") ?: "").substringAfterLast('/')
             val n = tag.substringAfterLast('.').toInt()
             return Info(BASE + n, "https://github.com/$REPO/releases/download/$tag/TimeWidget.apk", tag)
@@ -43,12 +45,24 @@ object Updater {
     }
 
     // নেটওয়ার্কে চেক করে — ব্যাকগ্রাউন্ড থ্রেড থেকে ডাকতে হবে। ব্যর্থ হলে আগের জানা অবস্থাই ফেরত দেয়।
+    // ধীর নেটওয়ার্কে একবারের ব্যর্থতায় বসে না থেকে সর্বোচ্চ ৩ বার চেষ্টা করে
     fun checkNow(c: Context): Info? {
-        try {
-            val i = fetch()
-            prefs(c).edit().putInt("v", i.v).putString("u", i.url).putString("t", i.tag).apply()
-        } catch (e: Exception) {
+        for (attempt in 1..3) {
+            try {
+                val i = fetch()
+                prefs(c).edit().putInt("v", i.v).putString("u", i.url).putString("t", i.tag).putLong("at", System.currentTimeMillis()).apply()
+                break
+            } catch (e: Exception) {
+                if (attempt < 3) try { Thread.sleep(1500L) } catch (e: InterruptedException) { }
+            }
         }
         return saved(c)
+    }
+
+    // উইজেটের পর্দা-হালনাগাদের সময় ব্যাকগ্রাউন্ডে ডাকা হয়: শেষ সফল চেকের ১৫ মিনিটের মধ্যে হলে কিছু করে না।
+    // এতে অ্যাপ খোলার আগেই নতুন সংস্করণের খবর ফোনে জমা থাকে, খুললেই বোতাম সাথে সাথে দেখা যায়।
+    fun checkIfStale(c: Context) {
+        if (System.currentTimeMillis() - prefs(c).getLong("at", 0L) < 15 * 60 * 1000L) return
+        checkNow(c)
     }
 }
