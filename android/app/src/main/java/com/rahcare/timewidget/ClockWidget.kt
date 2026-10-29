@@ -106,6 +106,8 @@ class ClockWidget : AppWidgetProvider() {
             val k = c.scale / 100f
             fun size(id: Int, sp: Float) = rv.setTextViewTextSize(id, TypedValue.COMPLEX_UNIT_SP, sp * k)
 
+            rv.setTextViewText(R.id.zz_loc, c.placeName())
+            size(R.id.zz_loc, 12f)
             rv.setTextViewText(R.id.hijri, s.hijri)
             rv.setTextViewText(R.id.bangla, s.bangla)
             size(R.id.time, 40f); size(R.id.ampm, 12f); size(R.id.endate, 15f)
@@ -128,8 +130,8 @@ class ClockWidget : AppWidgetProvider() {
             val sel = if (c.pick in 0..4 && c.pickCur == s.cur) c.pick else s.cur
             val span = (s.we[sel] - s.ws[sel]).coerceAtLeast(1)
             val frac = ((s.nowMin - s.ws[sel]) / span).coerceIn(0.0, 1.0)
-            rv.setTextViewText(R.id.zz_ws, Prayer.fmt(s.ws[sel], c.bnDigits))
-            rv.setTextViewText(R.id.zz_we, Prayer.fmt(s.we[sel], c.bnDigits))
+            rv.setTextViewText(R.id.zz_ws, "ওয়াক্ত শুরু " + Prayer.fmt(s.ws[sel], c.bnDigits))
+            rv.setTextViewText(R.id.zz_we, "ওয়াক্ত শেষ " + Prayer.fmt(s.we[sel], c.bnDigits))
             size(R.id.zz_ws, 11f); size(R.id.zz_we, 11f)
             rv.setProgressBar(R.id.zz_wbar, 1000, (frac * 1000).toInt(), false)
             val open = PendingIntent.getActivity(

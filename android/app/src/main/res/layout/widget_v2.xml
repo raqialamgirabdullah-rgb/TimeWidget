@@ -22,7 +22,9 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:gravity="start"
+            android:drawableStart="@drawable/ic_sunrise"
+            android:drawablePadding="4dp"
+            android:gravity="center_vertical|start"
             android:includeFontPadding="false"
             android:maxLines="1"
             android:text="সূর্যোদয় ৫:৪৩"
@@ -33,7 +35,9 @@
             android:id="@+id/zz_sunset"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="end"
+            android:drawableStart="@drawable/ic_sunset"
+            android:drawablePadding="4dp"
+            android:gravity="center_vertical|end"
             android:includeFontPadding="false"
             android:maxLines="1"
             android:text="সূর্যাস্ত ৫:২৩"
@@ -79,17 +83,35 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <TextClock
-            android:id="@+id/endate"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:format12Hour="EEE, MMM d"
-            android:format24Hour="EEE, MMM d"
             android:gravity="end"
-            android:maxLines="1"
-            android:textColor="@color/w_text"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+            android:orientation="vertical">
+
+            <TextClock
+                android:id="@+id/endate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:format12Hour="EEE, MMM d"
+                android:format24Hour="EEE, MMM d"
+                android:gravity="end"
+                android:maxLines="1"
+                android:textColor="@color/w_text"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/zz_loc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="ঢাকা"
+                android:textColor="@color/w_text2"
+                android:textSize="12sp" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- ২য় সারি: আরবি (হিজরি) তারিখ (বামে) · বাংলা তারিখ (ডানে) -->

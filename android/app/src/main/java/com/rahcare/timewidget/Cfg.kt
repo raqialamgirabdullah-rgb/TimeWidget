@@ -87,6 +87,20 @@ class Cfg(ctx: Context) {
     fun lat(): Double = autoFix()?.first ?: if (place in Places.list.indices) Places.list[place].second else customLat.toDoubleOrNull() ?: 23.8103
     fun lng(): Double = autoFix()?.second ?: if (place in Places.list.indices) Places.list[place].third else customLng.toDoubleOrNull() ?: 90.4125
 
+    // উইজেটে দেখানোর স্থানের নাম: স্বয়ংক্রিয় অবস্থান হলে ৬০ কিমির মধ্যে সবচেয়ে কাছের শহর, নইলে বাছা স্থান
+    fun placeName(): String {
+        val f = autoFix()
+        if (f == null) return if (place in Places.list.indices) Places.list[place].first else "নির্বাচিত স্থান"
+        var best = -1
+        var bd = Float.MAX_VALUE
+        val r = FloatArray(1)
+        for (i in Places.list.indices) {
+            android.location.Location.distanceBetween(f.first, f.second, Places.list[i].second, Places.list[i].third, r)
+            if (r[0] < bd) { bd = r[0]; best = i }
+        }
+        return if (best >= 0 && bd <= 60000f) Places.list[best].first else "বর্তমান অবস্থান"
+    }
+
     // হিজরি তারিখের সমন্বয়: ডিফল্ট −১ বাংলাদেশের (চাঁদ সৌদির একদিন পরে); স্বয়ংক্রিয় অবস্থান বাংলাদেশের বাইরে হলে সেই −১ বাদ (সৌদির মতো)
     fun hijriShift(): Int {
         val f = autoFix() ?: return hijriAdj
