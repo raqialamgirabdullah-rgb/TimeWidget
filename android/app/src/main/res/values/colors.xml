@@ -5,4 +5,6 @@
     <color name="w_text">#14212B</color>
     <color name="w_text2">#3B4A55</color>
     <color name="w_cell_on">#CFE6D9</color>
+    <color name="w_bar_bg">#C9D3DA</color>
+    <color name="w_bar_fg">#1E8E62</color>
 </resources>

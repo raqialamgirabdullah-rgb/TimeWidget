@@ -24,15 +24,22 @@ class ClockWidget : AppWidgetProvider() {
     override fun onReceive(ctx: Context, intent: Intent) {
         super.onReceive(ctx, intent)
         when (intent.action) {
+            ACTION_PICK -> pick(ctx, intent.getIntExtra("idx", -1))
             ACTION_TICK, Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED,
             Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_DATE_CHANGED -> refresh(ctx)
         }
     }
 
-    class Snap(val hijri: String, val bangla: String, val min: IntArray, val cur: Int, val nextAt: Long, val sunrise: Int, val sunset: Int)
+    // ws/we = প্রতিটি ওয়াক্তের শুরু ও শেষ (আজ মধ্যরাত থেকে মিনিট; ইশার শেষ পরদিনের ফজরে, তাই ১৪৪০ ছাড়াতে পারে / ফজরের আগে ইশার শুরু ঋণাত্মক হতে পারে); nowMin = এখন (ভগ্নাংশসহ মিনিট)
+    class Snap(
+        val hijri: String, val bangla: String, val min: IntArray, val cur: Int, val nextAt: Long, val sunrise: Int, val sunset: Int,
+        val ws: IntArray, val we: IntArray, val nowMin: Double
+    )
 
     companion object {
         const val ACTION_TICK = "com.rahcare.timewidget.TICK"
+        const val ACTION_PICK = "com.rahcare.timewidget.PICK"
+        private const val TICK_MS = 5 * 60 * 1000L // প্রগ্রেস বার নতুন করে আঁকার ব্যবধান
         val NAMES = arrayOf("ফজর", "যোহর", "আসর", "মাগরিব", "ইশা")
         private val CELL = intArrayOf(R.id.c0, R.id.c1, R.id.c2, R.id.c3, R.id.c4)
         private val NAME = intArrayOf(R.id.n0, R.id.n1, R.id.n2, R.id.n3, R.id.n4)
@@ -57,10 +64,28 @@ class ClockWidget : AppWidgetProvider() {
             var next = date.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli() + 5000L
             for (i in 0..4) if (m[i] > nowMin) next = minOf(next, start + m[i] * 60000L)
 
+            // প্রতিটি ওয়াক্তের শুরু ও শেষ: ফজর→সূর্যোদয়, যোহর→আসরের শুরু, আসর→সূর্যাস্ত, মাগরিব→ইশার শুরু, ইশা→পরদিনের ফজর
+            val sunriseMin = Prayer.minutes(t.sunrise)
+            val sunsetMin = Prayer.minutes(t.maghrib)
+            val ws = m.copyOf()
+            val we = intArrayOf(sunriseMin, m[2], sunsetMin, m[4], 0)
+            if (nowMin < m[0]) {
+                // ফজরের আগে: চলতি ইশা গতকালের, শেষ আজকের ফজরে
+                val y = Prayer.times(date.minusDays(1), c.lat(), c.lng(), tz, 18.0, 18.0, c.hanafi)
+                ws[4] = Prayer.minutes(y.isha) + c.off(4) - 1440
+                we[4] = m[0]
+            } else {
+                val tomorrow = date.plusDays(1)
+                val tz2 = zone.rules.getOffset(tomorrow.atStartOfDay(zone).toInstant()).totalSeconds / 3600.0
+                val n = Prayer.times(tomorrow, c.lat(), c.lng(), tz2, 18.0, 18.0, c.hanafi)
+                we[4] = Prayer.minutes(n.fajr) + c.off(0) + 1440
+            }
+            val nowF = nowMin + now.second / 60.0
+
             return Snap(
                 HijriDate.text(date.plusDays(c.hijriAdj.toLong())),
                 BanglaDate.text(date.plusDays(c.banglaAdj.toLong())),
-                m, cur, next, Prayer.minutes(t.sunrise), Prayer.minutes(t.maghrib)
+                m, cur, next, sunriseMin, sunsetMin, ws, we, nowF
             )
         }
 
@@ -95,12 +120,38 @@ class ClockWidget : AppWidgetProvider() {
                 size(NAME[i], 11f); size(TIME[i], 14f)
                 // চলতি ওয়াক্তের ঘরটি হালকা সবুজে চিহ্নিত
                 rv.setInt(CELL[i], "setBackgroundResource", if (i == s.cur) R.drawable.cell_on else 0)
+                // ঘরে চাপলে নিচের সারিতে সেই ওয়াক্তের শুরু-শেষ দেখায়; একই ঘরে আবার চাপলে চলতি ওয়াক্তে ফেরে
+                rv.setOnClickPendingIntent(CELL[i], pickIntent(ctx, i))
             }
+            // নিচের সারি: ওয়াক্তের শুরু (বামে) · প্রগ্রেস বার · শেষ (ডানে); ডিফল্টে চলতি ওয়াক্ত
+            val sel = if (c.pick in 0..4 && c.pickCur == s.cur) c.pick else s.cur
+            val span = (s.we[sel] - s.ws[sel]).coerceAtLeast(1)
+            val frac = ((s.nowMin - s.ws[sel]) / span).coerceIn(0.0, 1.0)
+            rv.setTextViewText(R.id.zz_ws, Prayer.fmt(s.ws[sel], c.bnDigits))
+            rv.setTextViewText(R.id.zz_we, Prayer.fmt(s.we[sel], c.bnDigits))
+            size(R.id.zz_ws, 11f); size(R.id.zz_we, 11f)
+            rv.setProgressBar(R.id.zz_wbar, 1000, (frac * 1000).toInt(), false)
             val open = PendingIntent.getActivity(
                 ctx, 0, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
             rv.setOnClickPendingIntent(R.id.root, open)
             return rv
+        }
+
+        private fun pickIntent(ctx: Context, i: Int): PendingIntent = PendingIntent.getBroadcast(
+            ctx, 10 + i, Intent(ctx, ClockWidget::class.java).setAction(ACTION_PICK).putExtra("idx", i),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // কোনো ওয়াক্তের ঘরে চাপ: সেটি বেছে নেয়; আবার চাপলে চলতি ওয়াক্তে ফেরে
+        private fun pick(ctx: Context, i: Int) {
+            if (i !in 0..4) return
+            val c = Cfg(ctx)
+            val s = compute(ctx)
+            val already = c.pick == i && c.pickCur == s.cur
+            c.pick = if (already) -1 else i
+            c.pickCur = s.cur
+            refresh(ctx)
         }
 
         private fun tickIntent(ctx: Context): PendingIntent = PendingIntent.getBroadcast(
@@ -124,7 +175,7 @@ class ClockWidget : AppWidgetProvider() {
                     mgr.updateAppWidget(id, build(ctx, s, w))
                 }
                 (ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
-                    .setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, s.nextAt, tickIntent(ctx))
+                    .setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, minOf(s.nextAt, System.currentTimeMillis() + TICK_MS), tickIntent(ctx))
             } catch (e: Exception) {
             }
         }

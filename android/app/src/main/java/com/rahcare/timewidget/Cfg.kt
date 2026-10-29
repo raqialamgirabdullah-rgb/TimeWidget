@@ -48,6 +48,15 @@ class Cfg(ctx: Context) {
         get() = sp.getInt("scale", 100)
         set(v) = sp.edit().putInt("scale", v).apply()
 
+    // উইজেটের নিচের সারিতে যে ওয়াক্তের সময় দেখানো হবে বলে চাপা হয়েছে (-১ = চলতি ওয়াক্ত); pickCur = চাপার সময় চলতি ওয়াক্ত কোনটা ছিল
+    // (ওয়াক্ত বদলালে নিজে থেকে চলতি ওয়াক্তে ফেরে)
+    var pick: Int
+        get() = sp.getInt("pick", -1)
+        set(v) = sp.edit().putInt("pick", v).apply()
+    var pickCur: Int
+        get() = sp.getInt("pickCur", -1)
+        set(v) = sp.edit().putInt("pickCur", v).apply()
+
     // ফজর, যোহর, আসর, মাগরিব, ইশা — মিনিটের সমন্বয়। ডিফল্ট: যোহর +১, মাগরিব +৩ (সূর্যাস্তের পর সতর্কতার মিনিট)
     private val defOff = intArrayOf(0, 1, 0, 3, 0)
     fun off(i: Int): Int = sp.getInt("off$i", defOff[i])

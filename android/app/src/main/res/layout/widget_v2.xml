@@ -137,7 +137,7 @@
             android:gravity="center"
             android:orientation="vertical"
             android:paddingTop="4dp"
-            android:paddingBottom="4dp">
+            android:paddingBottom="2dp">
 
             <TextView
                 android:id="@+id/n0"
@@ -167,7 +167,7 @@
             android:gravity="center"
             android:orientation="vertical"
             android:paddingTop="4dp"
-            android:paddingBottom="4dp">
+            android:paddingBottom="2dp">
 
             <TextView
                 android:id="@+id/n1"
@@ -197,7 +197,7 @@
             android:gravity="center"
             android:orientation="vertical"
             android:paddingTop="4dp"
-            android:paddingBottom="4dp">
+            android:paddingBottom="2dp">
 
             <TextView
                 android:id="@+id/n2"
@@ -227,7 +227,7 @@
             android:gravity="center"
             android:orientation="vertical"
             android:paddingTop="4dp"
-            android:paddingBottom="4dp">
+            android:paddingBottom="2dp">
 
             <TextView
                 android:id="@+id/n3"
@@ -257,7 +257,7 @@
             android:gravity="center"
             android:orientation="vertical"
             android:paddingTop="4dp"
-            android:paddingBottom="4dp">
+            android:paddingBottom="2dp">
 
             <TextView
                 android:id="@+id/n4"
@@ -278,5 +278,52 @@
                 android:textSize="14sp"
                 android:textStyle="bold" />
         </LinearLayout>
+    </LinearLayout>
+
+    <!-- ৪র্থ সারি: ওয়াক্তের শুরু (বামে) · সরু প্রগ্রেস বার · ওয়াক্তের শেষ (ডানে); কোনো ওয়াক্তের সময়ে চাপলে সেই ওয়াক্তের -->
+    <LinearLayout
+        android:id="@+id/zz_wrow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/zz_ws"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="৪:৪৬"
+            android:textColor="@color/w_text2"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <ProgressBar
+            android:id="@+id/zz_wbar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="3dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:indeterminate="false"
+            android:max="1000"
+            android:maxHeight="3dp"
+            android:minHeight="3dp"
+            android:progress="400"
+            android:progressDrawable="@drawable/wbar" />
+
+        <TextView
+            android:id="@+id/zz_we"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:text="৬:০৫"
+            android:textColor="@color/w_text2"
+            android:textSize="11sp"
+            android:textStyle="bold" />
     </LinearLayout>
 </LinearLayout>
