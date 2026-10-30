@@ -1,4 +1,4 @@
-# টাইম উইজেট (TimeWidget)
+# Time Widget (TimeWidget)
 
 একটি Android হোম-স্ক্রিন উইজেট, তিনটির কাজ একসাথে:
 
