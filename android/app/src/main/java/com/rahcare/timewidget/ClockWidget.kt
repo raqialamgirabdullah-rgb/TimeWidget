@@ -51,6 +51,8 @@ class ClockWidget : AppWidgetProvider() {
         const val ACTION_TICK = "com.rahcare.timewidget.TICK"
         const val ACTION_PICK = "com.rahcare.timewidget.PICK"
         private const val TICK_MS = 5 * 60 * 1000L // প্রগ্রেস বার নতুন করে আঁকার ব্যবধান
+        private const val DUHA_AFTER_SUNRISE = 15 // সালাতুদ্দোহা শুরু: সূর্যোদয়ের কত মিনিট পর
+        private const val DUHA_BEFORE_DHUHR = 10 // সালাতুদ্দোহা শেষ: যোহর শুরুর কত মিনিট আগে
         val NAMES = arrayOf("ফজর", "যোহর", "আসর", "মাগরিব", "ইশা")
         private val CELL = intArrayOf(R.id.c0, R.id.c1, R.id.c2, R.id.c3, R.id.c4)
         private val NAME = intArrayOf(R.id.n0, R.id.n1, R.id.n2, R.id.n3, R.id.n4)
@@ -136,12 +138,17 @@ class ClockWidget : AppWidgetProvider() {
                 // ঘরে চাপলে নিচের সারিতে সেই ওয়াক্তের শুরু-শেষ দেখায়; একই ঘরে আবার চাপলে চলতি ওয়াক্তে ফেরে
                 rv.setOnClickPendingIntent(CELL[i], pickIntent(ctx, i))
             }
-            // নিচের সারি: ওয়াক্তের শুরু (বামে) · প্রগ্রেস বার · শেষ (ডানে); ডিফল্টে চলতি ওয়াক্ত
-            val sel = if (c.pick in 0..4 && c.pickCur == s.cur) c.pick else s.cur
-            val span = (s.we[sel] - s.ws[sel]).coerceAtLeast(1)
-            val frac = ((s.nowMin - s.ws[sel]) / span).coerceIn(0.0, 1.0)
-            rv.setTextViewText(R.id.zz_ws, "ওয়াক্ত শুরু " + Prayer.fmt(s.ws[sel], c.bnDigits))
-            rv.setTextViewText(R.id.zz_we, "ওয়াক্ত শেষ " + Prayer.fmt(s.we[sel], c.bnDigits))
+            // নিচের সারি: ওয়াক্তের শুরু (বামে) · প্রগ্রেস বার · শেষ (ডানে); ডিফল্টে চলতি ওয়াক্ত।
+            // ফজর শেষ (সূর্যোদয়) থেকে যোহর শুরুর মাঝের ফাঁকে ডিফল্টে সালাতুদ্দোহা দেখায় (কোনো ওয়াক্তের ঘরে চাপলে সেটিই দেখায়)
+            val picked = c.pick in 0..4 && c.pickCur == s.cur
+            val sel = if (picked) c.pick else s.cur
+            val duha = !picked && s.cur == 0 && s.nowMin >= s.sunrise && s.nowMin < s.min[1]
+            val bs = if (duha) s.sunrise + DUHA_AFTER_SUNRISE else s.ws[sel]
+            val be = if (duha) (s.min[1] - DUHA_BEFORE_DHUHR).coerceAtLeast(bs + 1) else s.we[sel]
+            val span = (be - bs).coerceAtLeast(1)
+            val frac = ((s.nowMin - bs) / span).coerceIn(0.0, 1.0)
+            rv.setTextViewText(R.id.zz_ws, (if (duha) "সালাতুদ্দোহা শুরু " else "ওয়াক্ত শুরু ") + Prayer.fmt(bs, c.bnDigits))
+            rv.setTextViewText(R.id.zz_we, (if (duha) "শেষ " else "ওয়াক্ত শেষ ") + Prayer.fmt(be, c.bnDigits))
             size(R.id.zz_ws, 11f); size(R.id.zz_we, 11f)
             rv.setProgressBar(R.id.zz_wbar, 1000, (frac * 1000).toInt(), false)
             val open = PendingIntent.getActivity(
