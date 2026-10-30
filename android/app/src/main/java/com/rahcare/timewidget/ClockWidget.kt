@@ -51,8 +51,8 @@ class ClockWidget : AppWidgetProvider() {
         const val ACTION_TICK = "com.rahcare.timewidget.TICK"
         const val ACTION_PICK = "com.rahcare.timewidget.PICK"
         private const val TICK_MS = 5 * 60 * 1000L // প্রগ্রেস বার নতুন করে আঁকার ব্যবধান
-        private const val DUHA_AFTER_SUNRISE = 15 // সালাতুদ্দোহা শুরু: সূর্যোদয়ের কত মিনিট পর
-        private const val DUHA_BEFORE_DHUHR = 10 // সালাতুদ্দোহা শেষ: যোহর শুরুর কত মিনিট আগে
+        private const val DUHA_AFTER_SUNRISE = 24 // সালাতুদ্দোহা শুরু: সূর্যোদয়ের ২৪ মিনিট পর (ইসলামিক ফাউন্ডেশনের স্থায়ী সময়সূচির নোট: নিষিদ্ধ সময়)
+        private const val DUHA_BEFORE_DHUHR = 6 // সালাতুদ্দোহা শেষ: যোহরের লেখা সময়ের ৬ মিনিট আগে (ইসলামিক ফাউন্ডেশনের নোট)
         val NAMES = arrayOf("ফজর", "যোহর", "আসর", "মাগরিব", "ইশা")
         private val CELL = intArrayOf(R.id.c0, R.id.c1, R.id.c2, R.id.c3, R.id.c4)
         private val NAME = intArrayOf(R.id.n0, R.id.n1, R.id.n2, R.id.n3, R.id.n4)
