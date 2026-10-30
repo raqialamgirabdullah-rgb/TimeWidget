@@ -43,10 +43,6 @@ class Cfg(ctx: Context) {
     var bnDigits: Boolean
         get() = sp.getBoolean("bnd", true)
         set(v) = sp.edit().putBoolean("bnd", v).apply()
-    // লক স্ক্রিনে উইজেট নোটিফিকেশন হিসেবে দেখানো (চালু/বন্ধ)
-    var lockCard: Boolean
-        get() = sp.getBoolean("lockcard", false)
-        set(v) = sp.edit().putBoolean("lockcard", v).apply()
     // লেখার আকার (শতাংশ)
     var scale: Int
         get() = sp.getInt("scale", 100)
