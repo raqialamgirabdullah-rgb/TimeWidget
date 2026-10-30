@@ -26,15 +26,18 @@ class ClockWidget : AppWidgetProvider() {
         when (intent.action) {
             ACTION_PICK -> pick(ctx, intent.getIntExtra("idx", -1))
             // রিবুট বা অ্যাপ আপডেটের পর অবস্থানের অনুরোধ আবার চালু করতে হয়
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> { LocationUpdater.register(ctx); refresh(ctx) }
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) Updater.afterUpdate(ctx)
+                LocationUpdater.register(ctx); refresh(ctx)
+            }
             ACTION_TICK, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED, Intent.ACTION_DATE_CHANGED -> {
                 refresh(ctx)
-                // ব্যাকগ্রাউন্ডে নতুন সংস্করণ খুঁজে রাখে (১৫ মিনিটে একবার), যাতে অ্যাপ খুললেই আপডেট বোতাম দেখা যায়
+                // ব্যাকগ্রাউন্ডে প্রায় ১০ মিনিট পরপর নতুন সংস্করণ খোঁজে; পেলে নিজে ইনস্টল করে বা নোটিফিকেশন দেয় (Updater দেখুন)
                 if (intent.action == ACTION_TICK) {
                     val pr = goAsync()
                     val app = ctx.applicationContext
                     Thread {
-                        try { Updater.checkIfStale(app) } catch (e: Exception) { } finally { pr.finish() }
+                        try { Updater.backgroundCheck(app, 9 * 60 * 1000L) } catch (e: Exception) { } finally { pr.finish() }
                     }.start()
                 }
             }

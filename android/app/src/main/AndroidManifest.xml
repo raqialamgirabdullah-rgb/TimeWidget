@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- স্বয়ংক্রিয় স্থান: আনুমানিক অবস্থান (শহর-স্তরের), আর অ্যাপ বন্ধ থাকলেও এলাকা বদলানো ধরতে "সব সময়" অনুমতি -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />

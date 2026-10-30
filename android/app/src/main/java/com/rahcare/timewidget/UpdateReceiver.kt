@@ -6,26 +6,39 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.widget.Toast
 
-// PackageInstaller-এর ফল এখানে আসে; ফোন নিশ্চিত করতে চাইলে সেই পর্দা খোলে
+// PackageInstaller-এর ফল এখানে আসে; নিশ্চিত করার পর্দা দরকার হলে অ্যাপ সামনে থাকলে সেটা খোলে, নইলে নোটিফিকেশন দেয়
 class UpdateReceiver : BroadcastReceiver() {
     override fun onReceive(c: Context, i: Intent) {
+        val sp = c.getSharedPreferences("update", Context.MODE_PRIVATE)
         when (i.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 @Suppress("DEPRECATION")
                 val ui = i.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                // ফোন নিশ্চিত-পর্দা চাইল মানে নীরব ইনস্টল এবার হয়নি
+                sp.edit().putBoolean("inst_pending", true).apply()
+                if (i.getBooleanExtra("silent", false)) Updater.noteSilentFail(c)
                 if (ui != null) {
                     ui.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    try {
-                        c.startActivity(ui)
-                    } catch (e: Exception) {
-                        Toast.makeText(c, "নিশ্চিত করার পর্দা খুলল না — আবার চেষ্টা করুন", Toast.LENGTH_LONG).show()
+                    if (Updater.fg) {
+                        try {
+                            c.startActivity(ui)
+                        } catch (e: Exception) {
+                            Toast.makeText(c, "নিশ্চিত করার পর্দা খুলল না — আবার চেষ্টা করুন", Toast.LENGTH_LONG).show()
+                        }
+                    } else {
+                        Updater.confirmNotice(c, ui)
                     }
                 }
             }
             PackageInstaller.STATUS_SUCCESS -> {}
-            else -> Toast.makeText(
-                c, "আপডেট হয়নি: " + (i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: ""), Toast.LENGTH_LONG
-            ).show()
+            else -> {
+                val msg = i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: ""
+                try { Updater.onInstallFail?.invoke() } catch (e: Exception) { }
+                sp.edit().putBoolean("inst_pending", true).apply()
+                if (i.getBooleanExtra("silent", false)) Updater.noteSilentFail(c)
+                if (Updater.fg) Toast.makeText(c, "আপডেট হয়নি: $msg", Toast.LENGTH_LONG).show()
+                Updater.failNotice(c, msg)
+            }
         }
     }
 }

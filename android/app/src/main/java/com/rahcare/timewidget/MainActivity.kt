@@ -8,6 +8,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.location.Location
 import android.graphics.Color
 import android.graphics.Typeface
@@ -54,6 +55,7 @@ class MainActivity : Activity() {
     private lateinit var locBtn: TextView
     private val handler = Handler(Looper.getMainLooper())
     private val updPoll = Runnable { checkUpdate() }
+    private var wantInstall = false
     private var update: Updater.Info? = null
     private var updBusy = false
     private var pendingInstall = false
@@ -305,6 +307,14 @@ class MainActivity : Activity() {
         col.addView(text("সংস্করণ $ver", 12f, muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(18), 0, 0) })
 
         setContentView(scroll)
+        wantInstall = intent?.getBooleanExtra("upd", false) == true
+        // নোটিফিকেশনের অনুমতি (Android 13+): অ্যাপ বন্ধ থাকলে নতুন সংস্করণের খবর দিতে লাগে — একবারই চাওয়া হয়
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            !getSharedPreferences("update", MODE_PRIVATE).getBoolean("asked_notif", false)
+        ) {
+            getSharedPreferences("update", MODE_PRIVATE).edit().putBoolean("asked_notif", true).apply()
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 33)
+        }
         try {
             getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(netCallback)
         } catch (e: Exception) {
@@ -395,8 +405,12 @@ class MainActivity : Activity() {
             pendingInstall = false
             install(u)
         }
+        Updater.fg = true
+        Updater.onInstallFail = { runOnUiThread { updBusy = false; refreshUpd() } }
         update = Updater.saved(this)
+        if (update == null) Updater.clearNotice(this)
         refreshUpd()
+        maybeAutoInstall()
         checkUpdate()
         LocationUpdater.sync(this)
         LocationUpdater.register(applicationContext)
@@ -407,8 +421,28 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        Updater.fg = false
         handler.removeCallbacks(updPoll)
         super.onPause()
+    }
+
+    // নোটিফিকেশনে চেপে এলে (upd) নতুন সংস্করণ পাওয়া গেলে আপডেট নিজেই শুরু হয়
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent?.getBooleanExtra("upd", false) == true) {
+            wantInstall = true
+            update = Updater.saved(this)
+            maybeAutoInstall()
+        }
+    }
+
+    private fun maybeAutoInstall() {
+        val u = update
+        if (wantInstall && u != null && !updBusy) {
+            wantInstall = false
+            install(u)
+        }
     }
 
     override fun onDestroy() {
@@ -441,6 +475,7 @@ class MainActivity : Activity() {
                 if (isFinishing) return@runOnUiThread
                 update = now
                 refreshUpd()
+                maybeAutoInstall()
                 // নতুন সংস্করণ না পেলে অ্যাপ খোলা থাকা অবস্থায় প্রতি ৩০ সেকেন্ডে আবার দেখে
                 handler.removeCallbacks(updPoll)
                 if (now == null) handler.postDelayed(updPoll, 30000L)
@@ -458,49 +493,17 @@ class MainActivity : Activity() {
         if (updBusy) return
         updBusy = true
         updBtn.text = "ডাউনলোড হচ্ছে… ০%"
+        val app = applicationContext
         Thread {
-            val inst = packageManager.packageInstaller
-            val p = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-            if (Build.VERSION.SDK_INT >= 31) p.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
-            val id = inst.createSession(p)
             try {
-                val s = inst.openSession(id)
-                val cn = URL(u.url).openConnection() as HttpURLConnection
-                cn.connectTimeout = 15000
-                cn.readTimeout = 30000
-                if (cn.responseCode != 200) throw Exception("HTTP ${cn.responseCode}")
-                val total = cn.contentLengthLong
-                cn.inputStream.use { ins ->
-                    s.openWrite("a", 0, -1).use { out ->
-                        val buf = ByteArray(32 * 1024)
-                        var done = 0L
-                        var last = -1
-                        while (true) {
-                            val n = ins.read(buf)
-                            if (n < 0) break
-                            out.write(buf, 0, n)
-                            done += n
-                            if (total > 0) {
-                                val pct = (done * 100 / total).toInt().coerceIn(0, 100)
-                                if (pct != last) {
-                                    last = pct
-                                    runOnUiThread { updBtn.text = "ডাউনলোড হচ্ছে… ${Bn.num(pct)}%" }
-                                }
-                            }
-                        }
-                        s.fsync(out)
-                    }
-                }
-                val pi = PendingIntent.getBroadcast(
-                    this, id, Intent(this, UpdateReceiver::class.java),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-                )
-                runOnUiThread { updBtn.text = "ইনস্টল হচ্ছে…" }
-                s.commit(pi.intentSender)
+                Updater.installNow(app, u.url, false, { pct ->
+                    runOnUiThread { updBtn.text = "ডাউনলোড হচ্ছে… ${Bn.num(pct)}%" }
+                }, {
+                    runOnUiThread { updBtn.text = "ইনস্টল হচ্ছে…" }
+                })
                 // ইনস্টল সফল হলে অ্যাপ নিজেই নতুন হয়ে চালু হবে; না হলে ৬০ সেকেন্ড পর বোতাম ফিরিয়ে আনি
                 handler.postDelayed({ updBusy = false; refreshUpd() }, 60000L)
             } catch (e: Exception) {
-                try { inst.abandonSession(id) } catch (x: Exception) {}
                 runOnUiThread {
                     updBusy = false
                     refreshUpd()
