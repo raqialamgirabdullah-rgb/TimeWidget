@@ -47,15 +47,20 @@ class ClockWidget : AppWidgetProvider() {
     // ws/we = প্রতিটি ওয়াক্তের শুরু ও শেষ (আজ মধ্যরাত থেকে মিনিট; ইশার শেষ পরদিনের ফজরে, তাই ১৪৪০ ছাড়াতে পারে / ফজরের আগে ইশার শুরু ঋণাত্মক হতে পারে); nowMin = এখন (ভগ্নাংশসহ মিনিট)
     class Snap(
         val hijri: String, val bangla: String, val min: IntArray, val cur: Int, val nextAt: Long, val sunrise: Int, val sunset: Int,
-        val ws: IntArray, val we: IntArray, val nowMin: Double
+        val ws: IntArray, val we: IntArray, val nowMin: Double,
+        val tahajjud: Int // তাহাজ্জুদের শুরু = রাতের (সূর্যাস্ত→ফজর) শেষ তৃতীয়াংশের শুরু; শেষ = ফজর (we[4])
     )
+
+    // নফল সালাতের সময়: নাম, শুরু, শেষ (মিনিট)
+    class Nafl(val name: String, val start: Int, val end: Int)
 
     companion object {
         const val ACTION_TICK = "com.rahcare.timewidget.TICK"
         const val ACTION_PICK = "com.rahcare.timewidget.PICK"
         private const val TICK_MS = 5 * 60 * 1000L // প্রগ্রেস বার নতুন করে আঁকার ব্যবধান
-        private const val DUHA_AFTER_SUNRISE = 24 // সালাতুদ্দোহা শুরু: সূর্যোদয়ের ২৪ মিনিট পর (ইসলামিক ফাউন্ডেশনের স্থায়ী সময়সূচির নোট: নিষিদ্ধ সময়)
-        private const val DUHA_BEFORE_DHUHR = 6 // সালাতুদ্দোহা শেষ: যোহরের লেখা সময়ের ৬ মিনিট আগে (ইসলামিক ফাউন্ডেশনের নোট)
+        private const val DUHA_AFTER_SUNRISE = 24 // ইশরাক শুরু (নিষিদ্ধ সময় শেষ): সূর্যোদয়ের ২৪ মিনিট পর (ইসলামিক ফাউন্ডেশনের স্থায়ী সময়সূচির নোট)
+        private const val ISHRAQ_END_AFTER_SUNRISE = 60 // ইশরাকের সময় শেষ ধরা হয়েছে: সূর্যোদয়ের প্রায় ১ ঘণ্টা পর; এরপর সালাতুদ্দোহা (চাশত)
+        private const val DUHA_BEFORE_DHUHR = 6 // চাশত শেষ: যোহরের লেখা সময়ের ৬ মিনিট আগে (ইসলামিক ফাউন্ডেশনের নোট)
         val NAMES = arrayOf("ফজর", "যোহর", "আসর", "মাগরিব", "ইশা")
         private val CELL = intArrayOf(R.id.c0, R.id.c1, R.id.c2, R.id.c3, R.id.c4)
         private val NAME = intArrayOf(R.id.n0, R.id.n1, R.id.n2, R.id.n3, R.id.n4)
@@ -85,24 +90,54 @@ class ClockWidget : AppWidgetProvider() {
             val sunsetMin = Prayer.minutes(t.maghrib)
             val ws = m.copyOf()
             val we = intArrayOf(sunriseMin, m[2], sunsetMin, m[4], 0)
+            val nightStart: Int // চলতি রাতের শুরু = সূর্যাস্ত (আজ মধ্যরাত থেকে মিনিট)
             if (nowMin < m[0]) {
                 // ফজরের আগে: চলতি ইশা গতকালের, শেষ আজকের ফজরে
                 val y = Prayer.times(date.minusDays(1), c.lat(), c.lng(), tz, 18.0, 18.0, c.hanafi)
                 ws[4] = Prayer.minutes(y.isha) + c.off(4) - 1440
                 we[4] = m[0]
+                nightStart = Prayer.minutes(y.maghrib) - 1440
             } else {
                 val tomorrow = date.plusDays(1)
                 val tz2 = zone.rules.getOffset(tomorrow.atStartOfDay(zone).toInstant()).totalSeconds / 3600.0
                 val n = Prayer.times(tomorrow, c.lat(), c.lng(), tz2, 18.0, 18.0, c.hanafi)
                 we[4] = Prayer.minutes(n.fajr) + c.off(0) + 1440
+                nightStart = sunsetMin
             }
+            // তাহাজ্জুদ: সূর্যাস্ত থেকে ফজর পর্যন্ত সময়কে তিন ভাগ করে শেষ ভাগের শুরু
+            val tahajjud = nightStart + ((we[4] - nightStart) * 2.0 / 3.0).toInt()
             val nowF = nowMin + now.second / 60.0
 
             return Snap(
                 HijriDate.text(date.plusDays(c.hijriShift().toLong())),
                 BanglaDate.text(date.plusDays(c.banglaAdj.toLong())),
-                m, cur, next, sunriseMin, sunsetMin, ws, we, nowF
+                m, cur, next, sunriseMin, sunsetMin, ws, we, nowF, tahajjud
             )
+        }
+
+        // চলতি ওয়াক্তের সাথে সংশ্লিষ্ট নফল সালাত (না থাকলে null):
+        //  ফজরের ওয়াক্ত শেষে (সূর্যোদয়ের পর, যোহরের আগে): ইশরাক → সালাতুদ্দোহা (চাশত)
+        //  মাগরিব: আউয়াবীন (মাগরিবের পর থেকে ইশার শুরু পর্যন্ত)
+        //  ইশা: তাহাজ্জুদ (রাতের শেষ তৃতীয়াংশ থেকে ফজর পর্যন্ত)
+        fun nafl(s: Snap, cur: Int): Nafl? {
+            val ishraqStart = s.sunrise + DUHA_AFTER_SUNRISE
+            val ishraqEnd = (s.sunrise + ISHRAQ_END_AFTER_SUNRISE).coerceAtMost(s.min[1] - DUHA_BEFORE_DHUHR - 1)
+            val duhaEnd = (s.min[1] - DUHA_BEFORE_DHUHR).coerceAtLeast(ishraqEnd + 1)
+            return when {
+                cur == 0 && s.nowMin >= s.sunrise && s.nowMin < s.min[1] ->
+                    if (s.nowMin < ishraqEnd) Nafl("ইশরাক", ishraqStart, ishraqEnd) else Nafl("সালাতুদ্দোহা", ishraqEnd, duhaEnd)
+                cur == 3 -> Nafl("আউয়াবীন", s.ws[3], s.we[3])
+                cur == 4 -> Nafl("তাহাজ্জুদ", s.tahajjud, s.we[4])
+                else -> null
+            }
+        }
+
+        // নিচের সারিতে ডিফল্টে নফল দেখানো হবে কি না: ফজর-শেষ থেকে যোহর-শুরুর ফাঁকে, আর রাতের শেষ তৃতীয়াংশে
+        // (আউয়াবীন মাগরিবের ওয়াক্তের ভেতরেই, তাই ডিফল্টে মাগরিব দেখায়; মাগরিবের ঘরে চাপলে আউয়াবীন দেখায়)
+        private fun naflByDefault(s: Snap): Boolean = when (s.cur) {
+            0 -> nafl(s, 0) != null
+            4 -> s.nowMin >= s.tahajjud
+            else -> false
         }
 
         // দুই তারিখ এক লাইনে ধরাতে উইজেটের প্রস্থ মেপে লেখা প্রয়োজনে ছোট হয়
@@ -143,15 +178,14 @@ class ClockWidget : AppWidgetProvider() {
             }
             // নিচের সারি: ওয়াক্তের শুরু (বামে) · প্রগ্রেস বার · শেষ (ডানে); ডিফল্টে চলতি ওয়াক্ত।
             // ফজর শেষ (সূর্যোদয়) থেকে যোহর শুরুর মাঝের ফাঁকে ডিফল্টে সালাতুদ্দোহা দেখায় (কোনো ওয়াক্তের ঘরে চাপলে সেটিই দেখায়)
-            val picked = c.pick in 0..4 && c.pickCur == s.cur
-            val sel = if (picked) c.pick else s.cur
-            val duha = !picked && s.cur == 0 && s.nowMin >= s.sunrise && s.nowMin < s.min[1]
-            val bs = if (duha) s.sunrise + DUHA_AFTER_SUNRISE else s.ws[sel]
-            val be = if (duha) (s.min[1] - DUHA_BEFORE_DHUHR).coerceAtLeast(bs + 1) else s.we[sel]
+            val shown = shownIndex(c, s)
+            val nf = if (shown == NAFL) nafl(s, s.cur) else null
+            val bs = nf?.start ?: s.ws[shown.coerceIn(0, 4)]
+            val be = nf?.end ?: s.we[shown.coerceIn(0, 4)]
             val span = (be - bs).coerceAtLeast(1)
             val frac = ((s.nowMin - bs) / span).coerceIn(0.0, 1.0)
-            rv.setTextViewText(R.id.zz_ws, (if (duha) "সালাতুদ্দোহা শুরু " else "ওয়াক্ত শুরু ") + Prayer.fmt(bs, c.bnDigits))
-            rv.setTextViewText(R.id.zz_we, (if (duha) "শেষ " else "ওয়াক্ত শেষ ") + Prayer.fmt(be, c.bnDigits))
+            rv.setTextViewText(R.id.zz_ws, (if (nf != null) nf.name + " শুরু " else "ওয়াক্ত শুরু ") + Prayer.fmt(bs, c.bnDigits))
+            rv.setTextViewText(R.id.zz_we, (if (nf != null) "শেষ " else "ওয়াক্ত শেষ ") + Prayer.fmt(be, c.bnDigits))
             size(R.id.zz_ws, 11f); size(R.id.zz_we, 11f)
             rv.setProgressBar(R.id.zz_wbar, 1000, (frac * 1000).toInt(), false)
             val open = PendingIntent.getActivity(
@@ -166,13 +200,22 @@ class ClockWidget : AppWidgetProvider() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // কোনো ওয়াক্তের ঘরে চাপ: সেটি বেছে নেয়; আবার চাপলে চলতি ওয়াক্তে ফেরে
+        // নিচের সারিতে এখন কী দেখানো হচ্ছে: 0–৪ = সেই ওয়াক্ত, NAFL = চলতি ওয়াক্তের নফল সালাত
+        private const val NAFL = 5
+        private fun shownIndex(c: Cfg, s: Snap): Int {
+            val picked = (c.pick in 0..4 || (c.pick == NAFL && nafl(s, s.cur) != null)) && c.pickCur == s.cur
+            return if (picked) c.pick else if (naflByDefault(s)) NAFL else s.cur
+        }
+
+        // কোনো ওয়াক্তের ঘরে চাপ: সেটি বেছে নেয়; আবার চাপলে ডিফল্টে ফেরে।
+        // চলতি ওয়াক্তের ঘরে চাপলে (সংশ্লিষ্ট নফল থাকলে) নফলের সময় আর ওয়াক্তের সময় পালাক্রমে দেখায়।
         private fun pick(ctx: Context, i: Int) {
             if (i !in 0..4) return
             val c = Cfg(ctx)
             val s = compute(ctx)
-            val already = c.pick == i && c.pickCur == s.cur
-            c.pick = if (already) -1 else i
+            val shown = shownIndex(c, s)
+            val target = if (i == s.cur && nafl(s, s.cur) != null) (if (shown == NAFL) s.cur else NAFL) else i
+            c.pick = if (target == shown) -1 else target
             c.pickCur = s.cur
             refresh(ctx)
         }
